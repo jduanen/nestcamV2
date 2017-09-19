@@ -8,8 +8,6 @@ import sys
 import urllib
 import urllib2
 
-from flask import request
-
 
 NEST_AUTH_URL = "https://home.nest.com/login/oauth2"
 NEST_ACCESS_TOKEN_URL = "https://api.home.nest.com/oauth2/access_token"
@@ -162,7 +160,7 @@ class NestAccount(object):
           List of IDs for camera(s) with given name
         """
         self._updateCameras()
-        return [v['device_id'] for k, v in self.cams.iteritems() if v['name'].lower().startswith(name.lower())]
+        return [v['device_id'] for k, v in self.cams.iteritems() if v['name'].lower().startswith(namePrefix.lower())]
 
     def snapshotUrlLookup(self, camId):
         """ Get the Snapshot URL for a given camera.
@@ -206,7 +204,7 @@ class NestAccount(object):
 
         if r.headers['content-length'] == 0:
             # got empty image with success code, so throw an exception
-            raise ConnectionError("Unable to get image from camera")
+            raise requests.ConnectionError("Unable to get image from camera")
         if r.headers['Content-Type'] != 'image/jpeg':
             raise ValueError("Did not return a JPEG Image")
         image = r.content
