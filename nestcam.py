@@ -38,7 +38,9 @@ class NestAccount(object):
 
     def _updateCameras(self, validate=True):
         # query the API server
+        #### FIXME handle 307 REDIRECT returns
         req = urllib2.Request(NEST_API_URL, None, self.headers)
+        #### FIXME handle the 429 ERROR (Too Many Requests) here
         response = urllib2.urlopen(req, cafile=self.caFile)
         data = json.loads(response.read())
 
@@ -120,10 +122,22 @@ class NestAccount(object):
           None
 
         Returns:
-          List of JSON objects with info on each camera
+          JSON object with info for all of the cameras
         """
         self._updateCameras()
-        return self.cams.values()
+        return self.cams
+
+    def cameraIds(self):
+        """ Return the IDs of all Nest cameras for the logged-in account.
+
+        Args:
+          None
+
+        Returns:
+          List of IDs for all of the cameras
+        """
+        self._updateCameras()
+        return self.cams.keys()
 
     def cameraNames(self):
         """ Return the (long) names of all Nest cameras for the logged-in account.
@@ -150,6 +164,18 @@ class NestAccount(object):
         self._updateCameras()
         return {k: self.cams[k]['name'] for k in self.cams.keys()}
 
+    def cameraNameLookup(self, camId):
+        """ Get the name for the camera with the given ID.
+
+        Args:
+          camId: ID of the camera of interest
+
+        Returns:
+          (Long) name of the given camera
+        """
+        self._updateCameras()
+        return self.getInfo(camId)['name_long']
+
     def cameraIdLookup(self, namePrefix):
         """ Get the ID(s) for the camera(s) who's name starts with a given string.
 
@@ -174,7 +200,7 @@ class NestAccount(object):
         info = self.getInfo(camId)
         return info['snapshot_url']
 
-    def getInfo(self, camId):
+    def cameraInfo(self, camId):
         """ Return info for the given camera.
 
         Args:
@@ -222,13 +248,13 @@ if __name__ == '__main__':
     nums = []
     nest = NestAccount(PRODUCT_ID, PRODUCT_SECRET, CA_FILE)
 
-    cs = nest.cameras()
-    num = len(cs)
+    cams = nest.cameras()
+    num = len(cams)
     nums.append(num)
     print("Cameras: {0}".format(num))
-    for c in cs:
-        print("    Camera: {0}".format(c['name']))
-        json.dump(c, sys.stdout, indent=4, sort_keys=True)
+    for camId, camInfo in cams.iteritems():
+        print("    Camera: {0}".format(camInfo['name_long']))
+        json.dump(camInfo, sys.stdout, indent=4, sort_keys=True)
         print("")
 
     camNames = nest.cameraNames()
@@ -264,7 +290,7 @@ if __name__ == '__main__':
 
     print("Camera Info:")
     for camId, camName in camsNameMap.iteritems():
-        info = nest.getInfo(camId)
+        info = nest.cameraInfo(camId)
         print("    {0}:".format(camName))
         json.dump(info, sys.stdout, indent=4, sort_keys=True)
         print("")
