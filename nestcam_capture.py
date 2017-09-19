@@ -9,6 +9,7 @@
 #### * make all/many config values be setable via cmd line opts
 #### * enable logging and put logs into the code (instead of prints)
 #### * restrict testing mode and do all prints with logs
+#### * default to all cameras and add white-/black-list names/ids to config -- all, only these, all except these
 
 
 import argparse
@@ -22,6 +23,9 @@ import time
 import yaml
 
 
+# N.B. Without a NestAware subscription, Google limits snapshots to 2 per minute (per-camera or per-site?)
+GOOGLE_RATE_LIMIT = 30 * 1000   # 30 secs
+
 # default configuraton
 config = {
     "testing": True,
@@ -30,10 +34,6 @@ config = {
     "numFrames": 0,	    # capture forever
     "outPath": "/tmp/imgs/"  # save frames in /tmp/imgs/<camName>/<time>.jpg
 }
-
-
-DROPCAM_BASE = "https://www.dropcam.com/"
-DROPCAM_PREFIX = os.path.join(DROPCAM_BASE, "api/v1/")
 
 
 # Merge a new dict into an old one, updating the old one (recursively).
