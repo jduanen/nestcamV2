@@ -2,6 +2,7 @@
 """Nest Cam Library"""
 
 import json
+import os
 import requests
 import sys
 import urllib
@@ -27,63 +28,6 @@ class APIError(NestCamLibError):
     """Error class for exceptions in calling the Nest API Server."""
     def __init__(self, result):
         self.result = {"Error": result}
-
-
-# Encapsulation of a Nest Camera
-class NestCamera(object):
-    def __init__(self, cookies, info):
-        self.cookies = cookies
-        self.info = info
-        self.uuid = info['uuid']
-
-    def name(self):
-        return self.info['name']
-
-    def id(self):
-        return self.info['id']
-
-    def capabilities(self):
-        return self.info['capabilities']
-
-    #### TODO add methods to get/set camera properties
-
-    def dump(self):
-        print("Camera: {0} - {1}".format(self.info['name'], self.info['uuid']))
-        json.dump(self.info, sys.stdout, indent=4, sort_keys=True)
-        print("\n")
-
-    #### TODO method to grab a frame -- on event, periodically, log to file,...
-    #### TODO figure out what to do with the seconds arg
-    ####      (i.e.,: when to capture image in seconds from epoch)
-    #### TODO figure out if we can specify image height too/instead of width?
-    def grabFrame(self, width=720):
-        path = "https://nexusapi.camera.home.nest.com/get_image"
-        params = "uuid={0}&width={1}".format(self.uuid, width)
-        r = requests.get(path, params=params, cookies=self.cookies)
-        r.raise_for_status()
-
-        if config['testing']:
-            print("Headers: {0}".format(r.headers))
-        if r.headers['content-length'] == 0:
-            # got empty image with success code, so throw an exception
-            raise ConnectionError('Unable to get image from camera')
-        image = r.content
-        return image
-
-    #### TODO methods for events -- get last, wait for, log, etc.
-    def getEvents(self, startTime, endTime=None):
-        if not endTime:
-            endTime = int(time.time())
-        path = "https://nexusapi.camera.home.nest.com/get_cuepoint"
-        params = "uuid={0}&start_time={1}&end_time={2}".format(self.uuid,
-                                                               startTime,
-                                                               endTime)
-        r = requests.get(path, params=params, cookies=self.cookies)
-        r.raise_for_status()
-        print("RESPONSE: {0}\n".format(r))
-        return r.json()
-
-    #### TODO methods for events -- get last, wait for, log, etc.
 
 
 class NestAccount(object):
@@ -134,6 +78,7 @@ class NestAccount(object):
                 'state':     'STATE'
             }
             response = requests.get(NEST_AUTH_URL, params=queryStr)
+            ####response = requests.get(AUTH_URL)
             print("{0}".format(response))
             print("C: {0}".format(response.content))
             ####authCode = request.args.get("code")
@@ -219,13 +164,62 @@ class NestAccount(object):
         self._updateCameras()
         return [v['device_id'] for k, v in self.cams.iteritems() if v['name'].lower().startswith(name.lower())]
 
+    def snapshotUrlLookup(self, camId):
+        """ Get the Snapshot URL for a given camera.
+
+        Args:
+          camId: ID of the camera of interest
+
+        Returns:
+          Snapshot URL for the camera with the given ID
+        """
+        info = self.getInfo(camId)
+        return info['snapshot_url']
+
+    def getInfo(self, camId):
+        """ Return info for the given camera.
+
+        Args:
+          camId: ID of the camera of interest
+
+        Returns:
+          JSON object containing information about the given camera
+        """
+        self._updateCameras()
+        if camId not in self.cams:
+            raise APIError("Camera with ID {0} not found".format(camId))
+        info = self.cams[camId]
+        return info
+
+    def getSnapshot(self, camId):
+        """ Capture an image from the given camera.
+
+        Args:
+          camId: ID of the camera of interest
+
+        Returns:
+          JPEG image
+        """
+        url = self.snapshotUrlLookup(camId)
+        r = requests.get(url)
+        r.raise_for_status()
+
+        if r.headers['content-length'] == 0:
+            # got empty image with success code, so throw an exception
+            raise ConnectionError("Unable to get image from camera")
+        if r.headers['Content-Type'] != 'image/jpeg':
+            raise ValueError("Did not return a JPEG Image")
+        image = r.content
+        return image
+
 
 #
 # TEST CODE
 #
 
 if __name__ == '__main__':
-    from test_config import PRODUCT_ID, PRODUCT_SECRET, CA_FILE, CAM_NAMES_MAP
+    from test_config import PRODUCT_ID, PRODUCT_SECRET, CA_FILE, CAM_NAMES_MAP, IMG_DIR
+    #### from test_config import AUTH_URL
 
     nums = []
     nest = NestAccount(PRODUCT_ID, PRODUCT_SECRET, CA_FILE)
@@ -257,6 +251,11 @@ if __name__ == '__main__':
         print("ERROR: mismatch in number of cameras found {0}".format(nums))
         sys.exit(1)
 
+    print("Snapshot URL:")
+    for camId, camName in camsNameMap.iteritems():
+        url = nest.snapshotUrlLookup(camId)
+        print("    {0}: {1}".format(camName, url))
+
     print("CameraIdsLookup:")
     for name, numIds in CAM_NAMES_MAP.iteritems():
         ids = nest.cameraIdLookup(name)
@@ -264,5 +263,21 @@ if __name__ == '__main__':
         if len(ids) != numIds:
             print("ERROR: got {0} IDs, wanted {1}".format(len(ids), numIds))
             sys.exit(1)
+
+    print("Camera Info:")
+    for camId, camName in camsNameMap.iteritems():
+        info = nest.getInfo(camId)
+        print("    {0}:".format(camName))
+        json.dump(info, sys.stdout, indent=4, sort_keys=True)
+        print("")
+        break
+
+    print("Snapshot:")
+    for camId, camName in camsNameMap.iteritems():
+        path = os.path.join(IMG_DIR, camName + camId)
+        img = nest.getSnapshot(camId)
+        with open(path, "w") as outFile:
+            outFile.write(img)
+            print("    {0}".format(path))
 
     print("SUCCESS")
