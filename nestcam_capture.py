@@ -9,6 +9,7 @@
 #### * enable logging and put logs into the code (instead of prints)
 #### * restrict testing mode and do all prints with logs
 #### * default to all cameras and add white-/black-list names/ids to config -- all, only these, all except these
+#### * make code try to respect the Google rate limits
 
 
 import argparse
